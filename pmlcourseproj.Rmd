@@ -1,0 +1,82 @@
+---
+title: "Practical Machine Learning Project"
+author: "Preston Smith"
+date: "Sunday, August 24, 2014"
+output: html_document
+---
+
+The goal of this project was to create a machine learning algorithm that would let us predict which of the five types of weight lifting exercises were being performed in the final test dataset based on the variables that were provided. 
+
+Before we could consider models, we needed to clean the training data. We don't want to include any variables that only contain NA's, only contain blanks, have near zero variance, or provide no additional useful information. This is done below.
+
+```{r, echo=FALSE, warning=FALSE, cache=TRUE}
+setwd("C:/Users/Preston/Desktop/Coursera/Practical Machine Learning/Course Project")
+
+# read data
+orig_train <- read.csv("Data/pml-training.csv", header=T)
+final_test <- read.csv("Data/pml-testing.csv", header=T)
+
+library(lattice)
+library(ggplot2)
+library(caret)
+```
+
+```{r, warning=FALSE, cache=TRUE}
+# start with NA's
+na_s <- apply(is.na(orig_train), 2, sum)    
+sub_train <- orig_train[, na_s==0]
+
+# now look at blanks
+blanks <- apply(sub_train=="", 2, sum)
+sub_train <- sub_train[, blanks==0]
+
+
+## what about near 0 variance variables?
+nsv <- nearZeroVar(sub_train)
+sub_train <- sub_train[, -nsv]
+
+
+## lose column X that is just row number
+sub_train <- sub_train[, names(sub_train) != "X"]
+
+## lose columns for name, timestamps, and num_window
+sub_train <- sub_train[, !(names(sub_train) %in% (names(orig_train)[2:7]))]
+
+```
+
+Next, we need to split the original training data into training and testing datasets. This will allow us to use cross-validation to get an estimate of the out of sample error. We will set the seed so that the results of the random sampling are reproducible. 70% of the original training data will be used for the training dataset while the remaining 30% will make up our testing dataset.
+
+```{r, warning=FALSE, cache=TRUE}
+library(lattice)
+library(ggplot2)
+library(caret)
+
+set.seed(24)
+inTrain <- createDataPartition(y=sub_train$classe, p=.7, list=F)
+
+training <- sub_train[inTrain,]
+testing <- sub_train[-inTrain,]
+```
+
+Now we can build our model on the training dataset. I wanted to use the random forest method, but I had to stop the computation after a couple of hours as it had not finished running. Due to my limited computing power, I chose to limit the training dataset to 1,000 random rows so that I could get an algorithm. This code is shown below.
+
+```{r, warning=FALSE, cache=TRUE}
+rows2 <- sample(1:nrow(training), size=1000, replace=F)
+
+modFit_rf2 <- train(classe ~ ., method="rf", data=training[rows2,], prox=T)
+modFit_rf2
+```
+
+We can use the resulting model on our testing dataset to get an expected out of sample error before we run the model on the final testing dataset.
+
+```{r, warning=FALSE, cache=TRUE}
+table(predict(modFit_rf2, testing), testing$classe)
+round(sum(predict(modFit_rf2, testing) == testing$classe) / nrow(testing), 2)
+```
+
+As you can see, our expected out of sample error is around 10%. Sure enough, this model incorrectly categorized a couple of the final 20 test cases.
+
+```{r, warning=FALSE, cache=TRUE}
+answers2 <- predict(modFit_rf2, final_test)
+as.character(answers2)
+```
